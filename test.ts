@@ -10,12 +10,8 @@ import {
   DateTimeType,
   Filter,
   Enum,
-  ManyToMany,
-  Unique,
-  OneToOne,
 } from "@mikro-orm/core";
 import { SqliteDriver } from "@mikro-orm/sqlite";
-import { PostgreSqlDriver } from "@mikro-orm/postgresql";
 
 @Filter({ name: "notDeleted", cond: { deletedAt: null }, default: true })
 class BaseEntity {
@@ -30,109 +26,34 @@ class BaseEntity {
   }
 }
 
-export enum Locale {
-  EN = "en",
-  KO = "ko",
-}
-
 export enum Role {
-  ADMIN = "ADMIN", // ENKI Platform Team
-
-  LEADER = "LEADER", // ENKI Consulting Leaders
-  USER = "USER", // ENKI Members
-
-  ORG_ADMIN = "ORG_ADMIN", // Organization Admin
-  ORG_MANAGER = "ORG_MANAGER", // Organization Manager
-  ORG_USER = "ORG_USER", // Organization User
-
-  GUEST = "GUEST", // Unknown
-}
-
-export enum HTTPMethod {
-  GET = "GET",
-  POST = "POST",
-  PUT = "PUT",
-  DELETE = "DELETE",
-  PATCH = "PATCH",
-  ALL = "ALL",
+  ADMIN = "ADMIN",
+  USER = "USER",
 }
 
 export enum ProjectMemberType {
-  PENTESTER = "PENTESTER",
-  ORGANIZATION = "ORGANIZATION",
-}
-
-export enum FileType {
-  ORGANIZATION_PROFILE = "ORGANIZATION_PROFILE",
-  USER_PROFILE = "USER_PROFILE",
-  PROJECT = "PROJECT",
-  PROJECT_LOUNGE = "PROJECT_LOUNGE",
-  ISSUE = "ISSUE",
-  NEWS_THUMBNAIL = "NEWS_THUMBNAIL",
-}
-
-export enum FileStatus {
-  PENDING = "PENDING",
-  UPLOADED = "UPLOADED",
-  FAILED = "FAILED",
+  TYPE1 = "TYPE1",
+  TYPE2 = "TYPE2",
 }
 
 @Entity()
 export class RoleEntity extends BaseEntity {
-  @Enum({ items: () => Role, unique: true })
-  name!: Role;
-
-  @ManyToMany(() => PermissionEntity, (permission) => permission.roles, {
-    owner: true,
-  })
-  permissions!: Collection<PermissionEntity>;
-
-  constructor({ id, name }: { id: string; name: Role }) {
+  constructor({ id }: { id: string }) {
     super();
     this.id = id;
-    this.name = name;
   }
 }
 
 @Entity()
-@Unique({ properties: ["method", "path"] })
-export class PermissionEntity extends BaseEntity {
-  @Property({ nullable: false })
-  path!: string;
-
-  @Enum(() => HTTPMethod)
-  method!: HTTPMethod;
-
-  @ManyToMany(() => RoleEntity, (role) => role.permissions)
-  roles!: RoleEntity[];
-}
-
-@Entity()
 class User extends BaseEntity {
-  @OneToMany(() => ProjectMember, (projectMember) => projectMember.user, {
-    strategy: "joined",
-  })
-  joinedProjects!: Collection<ProjectMember>;
-
-  @Property({ nullable: true, default: null })
-  organizationId: number | null = null;
+  @OneToMany(() => ProjectMember, (projectMember) => projectMember.user)
+  projectMembers!: Collection<ProjectMember>;
 
   @ManyToOne(() => RoleEntity, {
     eager: true,
     strategy: "joined",
   })
   role!: RoleEntity;
-
-  @Property({ nullable: true, default: null })
-  note: string | null = null; // 비고
-
-  @Enum({
-    items: () => Locale,
-    comment: "마지막 사용 언어",
-    default: Locale.KO,
-    nullable: true,
-  })
-  locale?: Locale = Locale.KO;
 
   constructor({ id, role }: { id: string; role: RoleEntity }) {
     super();
@@ -143,24 +64,7 @@ class User extends BaseEntity {
 
 @Entity()
 class Project extends BaseEntity {
-  @Property()
-  name: string = "Project";
-
-  @Property()
-  col1: string = "col1";
-
-  @Property()
-  col2: string = "col2";
-
-  @Property()
-  col3: string = "col3";
-
-  @Property()
-  col4: string = "col4";
-
-  @OneToMany(() => ProjectMember, (member) => member.project, {
-    eager: false,
-  })
+  @OneToMany(() => ProjectMember, (member) => member.project)
   members!: Collection<ProjectMember>;
 
   constructor({ id }: { id: string }) {
@@ -173,18 +77,14 @@ class Project extends BaseEntity {
 class ProjectMember extends BaseEntity {
   @Enum({
     items: () => ProjectMemberType,
-    comment: "프로젝트 멤버 유형",
-    default: ProjectMemberType.PENTESTER,
+    default: ProjectMemberType.TYPE1,
   })
-  type: ProjectMemberType = ProjectMemberType.PENTESTER;
+  type: ProjectMemberType = ProjectMemberType.TYPE1;
 
-  @ManyToOne(() => User, { eager: false })
+  @ManyToOne(() => User)
   user!: User;
 
-  @ManyToOne(() => Project, {
-    eager: false,
-    strategy: "joined",
-  })
+  @ManyToOne(() => Project)
   project!: Project;
 
   constructor({
@@ -211,22 +111,20 @@ let orm: MikroORM<SqliteDriver>;
 beforeAll(async () => {
   orm = await MikroORM.init({
     driver: SqliteDriver,
-    // debug: true,
     entities: [User, ProjectMember, Project],
     dbName: ":memory:",
     loadStrategy: "select-in",
     allowGlobalContext: true,
   });
-  await orm.schema.dropSchema();
   await orm.schema.createSchema();
 
   const user1 = new User({
     id: "1",
-    role: new RoleEntity({ id: "1", name: Role.ADMIN }),
+    role: new RoleEntity({ id: "1" }),
   });
   const user2 = new User({
     id: "2",
-    role: new RoleEntity({ id: "2", name: Role.USER }),
+    role: new RoleEntity({ id: "2" }),
   });
   const project = new Project({ id: "1" });
   orm.em.create(
@@ -235,7 +133,7 @@ beforeAll(async () => {
       id: "1",
       user: user1,
       project,
-      type: ProjectMemberType.PENTESTER,
+      type: ProjectMemberType.TYPE1,
     })
   );
   orm.em.create(
@@ -244,7 +142,7 @@ beforeAll(async () => {
       id: "2",
       user: user2,
       project,
-      type: ProjectMemberType.PENTESTER,
+      type: ProjectMemberType.TYPE1,
     })
   );
   await orm.em.flush();
@@ -259,17 +157,17 @@ afterAll(async () => {
   await orm.close(true);
 });
 
-test("custom type pk entity not being populated", async () => {
+test("should populate project members with specific type using populateWhere", async () => {
   const row = await orm.em.findOneOrFail(
     Project,
     {
       id: "1",
     },
     {
-      populate: ["members", "members.user"],
+      populate: ["members.user"],
       populateWhere: {
         members: {
-          type: ProjectMemberType.PENTESTER,
+          type: ProjectMemberType.TYPE1,
         },
       },
     }

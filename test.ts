@@ -108,123 +108,11 @@ export class PermissionEntity extends BaseEntity {
 }
 
 @Entity()
-export class FileEntity extends BaseEntity {
-  @Property()
-  uploaderUuid: string; // uploader uuid
-
-  @Property()
-  fileOriginName: string;
-
-  @Property()
-  fileName: string;
-
-  @Property({ comment: "파일 상태" })
-  @Enum(() => FileStatus)
-  fileStatus: FileStatus;
-
-  @Property({ comment: "파일 사용처" })
-  @Enum(() => FileType)
-  fileType: FileType;
-
-  @Property({ type: "text", comment: "S3 URL", nullable: true })
-  url?: string; // S3 URL
-
-  @Property({ type: "text", comment: "업로드용 Presigned URL" })
-  presignedUrl: string; // Presigned URL
-
-  @Property({
-    type: "boolean",
-    comment: "보안 옵션 사용 여부",
-    default: false,
-    nullable: true,
-  })
-  isSecure?: boolean;
-
-  @Property()
-  extension: string; // file extension
-
-  @Property({ type: "bigint" })
-  fileSize: number; // file size
-
-  private constructor(
-    uploaderUuid: string,
-    fileName: string,
-    fileOriginName: string,
-    fileType: FileType,
-    fileStatus: FileStatus = FileStatus.PENDING,
-    url: string,
-    presignedUrl: string,
-    extension: string,
-    fileSize: number,
-    isSecure?: boolean
-  ) {
-    super();
-    this.uploaderUuid = uploaderUuid;
-    this.fileName = fileName;
-    this.fileOriginName = fileOriginName;
-    this.fileType = fileType;
-    this.fileStatus = fileStatus;
-    this.url = url;
-    this.presignedUrl = presignedUrl;
-    this.extension = extension;
-    this.fileSize = fileSize;
-    this.isSecure = isSecure ?? false;
-  }
-
-  public static create(
-    fileName: string,
-    fileOriginName: string,
-    fileType: FileType,
-    fileStatus: FileStatus = FileStatus.PENDING,
-    url: string,
-    presignedUrl: string,
-    extension: string,
-    fileSize: number,
-    uploaderUuid?: string,
-    isSecure?: boolean
-  ) {
-    return new FileEntity(
-      uploaderUuid ?? "1",
-      fileName,
-      fileOriginName,
-      fileType,
-      fileStatus,
-      url,
-      presignedUrl,
-      extension,
-      fileSize,
-      isSecure
-    );
-  }
-}
-
-@Entity()
 class User extends BaseEntity {
-  @Property({ unique: true })
-  email: string;
-
-  @Property({ nullable: true })
-  password?: string;
-
-  @Property({ length: 50 })
-  name: string;
-
-  @Property({ length: 13, nullable: true })
-  phone: string;
-
   @OneToMany(() => ProjectMember, (projectMember) => projectMember.user, {
     strategy: "joined",
   })
   joinedProjects!: Collection<ProjectMember>;
-
-  @OneToOne({
-    entity: () => FileEntity,
-    comment: "프로필 이미지",
-    nullable: true,
-    eager: true,
-    strategy: "joined",
-  })
-  profile?: FileEntity;
 
   @Property({ nullable: true, default: null })
   organizationId: number | null = null;
@@ -246,27 +134,9 @@ class User extends BaseEntity {
   })
   locale?: Locale = Locale.KO;
 
-  constructor({
-    id,
-    email,
-    password,
-    name,
-    phone,
-    role,
-  }: {
-    id: string;
-    email: string;
-    password: string;
-    name: string;
-    phone: string;
-    role: RoleEntity;
-  }) {
+  constructor({ id, role }: { id: string; role: RoleEntity }) {
     super();
     this.id = id;
-    this.email = email;
-    this.password = password;
-    this.name = name;
-    this.phone = phone;
     this.role = role;
   }
 }
@@ -352,18 +222,10 @@ beforeAll(async () => {
 
   const user1 = new User({
     id: "1",
-    email: "test1@test.com",
-    password: "password1",
-    name: "test1",
-    phone: "12345678901",
     role: new RoleEntity({ id: "1", name: Role.ADMIN }),
   });
   const user2 = new User({
     id: "2",
-    email: "test2@test.com",
-    password: "password2",
-    name: "test2",
-    phone: "12345678902",
     role: new RoleEntity({ id: "2", name: Role.USER }),
   });
   const project = new Project({ id: "1" });

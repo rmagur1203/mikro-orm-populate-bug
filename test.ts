@@ -1,109 +1,56 @@
 import {
   Entity,
-  Collection,
-  ManyToOne,
   PrimaryKey,
-  OneToMany,
   MikroORM,
-  wrap,
   Property,
-  DateTimeType,
-  Filter,
   Enum,
+  ManyToMany,
 } from "@mikro-orm/core";
 import { SqliteDriver } from "@mikro-orm/sqlite";
 
-@Filter({ name: "notDeleted", cond: { deletedAt: null }, default: true })
 class BaseEntity {
-  @PrimaryKey({ type: "string" })
-  id!: string;
+  @PrimaryKey({ type: "number", autoincrement: true })
+  id?: number;
 
-  @Property({ type: DateTimeType, nullable: true, default: null })
-  deletedAt: Date | null = null;
-
-  get _isDeleted() {
-    return this.deletedAt !== null;
-  }
+  @Property({ type: "string", unique: true })
+  uuid!: string;
 }
 
-export enum Role {
-  ADMIN = "ADMIN",
-  USER = "USER",
-}
-
-export enum ProjectMemberType {
-  TYPE1 = "TYPE1",
-  TYPE2 = "TYPE2",
+enum Entity1Status {
+  ACTIVE = "active",
+  PROCESSING = "processing",
+  INACTIVE = "inactive",
 }
 
 @Entity()
-export class RoleEntity extends BaseEntity {
-  constructor({ id }: { id: string }) {
-    super();
-    this.id = id;
-  }
-}
-
-@Entity()
-class User extends BaseEntity {
-  @OneToMany(() => ProjectMember, (projectMember) => projectMember.user)
-  projectMembers!: Collection<ProjectMember>;
-
-  @ManyToOne(() => RoleEntity, {
-    eager: true,
-    strategy: "joined",
-  })
-  role!: RoleEntity;
-
-  constructor({ id, role }: { id: string; role: RoleEntity }) {
-    super();
-    this.id = id;
-    this.role = role;
-  }
-}
-
-@Entity()
-class Project extends BaseEntity {
-  @OneToMany(() => ProjectMember, (member) => member.project)
-  members!: Collection<ProjectMember>;
-
-  constructor({ id }: { id: string }) {
-    super();
-    this.id = id;
-  }
-}
-
-@Entity()
-class ProjectMember extends BaseEntity {
+export class Entity1 extends BaseEntity {
   @Enum({
-    items: () => ProjectMemberType,
-    default: ProjectMemberType.TYPE1,
+    items: () => Entity1Status,
+    customOrder: [
+      Entity1Status.ACTIVE,
+      Entity1Status.PROCESSING,
+      Entity1Status.INACTIVE,
+    ],
   })
-  type: ProjectMemberType = ProjectMemberType.TYPE1;
+  status!: Entity1Status;
 
-  @ManyToOne(() => User)
-  user!: User;
+  @ManyToMany({
+    entity: () => Entity2,
+    eager: true,
+    mappedBy: "entity1",
+  })
+  entity2!: Entity2[];
+}
 
-  @ManyToOne(() => Project)
-  project!: Project;
-
-  constructor({
-    id,
-    user,
-    project,
-    type,
-  }: {
-    id: string;
-    user: User;
-    project: Project;
-    type: ProjectMemberType;
-  }) {
-    super();
-    this.id = id;
-    this.user = user;
-    this.project = project;
-    this.type = type;
-  }
+@Entity()
+export class Entity2 extends BaseEntity {
+  @ManyToMany({
+    entity: () => Entity1,
+    referenceColumnName: "uuid",
+    columnType: "uuid",
+    fieldName: "entity1_id",
+  })
+  entity1!: Entity1[];
 }
 
 let orm: MikroORM<SqliteDriver>;
@@ -111,44 +58,13 @@ let orm: MikroORM<SqliteDriver>;
 beforeAll(async () => {
   orm = await MikroORM.init({
     driver: SqliteDriver,
-    entities: [User, ProjectMember, Project],
+    entities: [Entity1, Entity2],
     dbName: ":memory:",
-    loadStrategy: "select-in",
+    loadStrategy: "joined",
     allowGlobalContext: true,
+    debug: true,
   });
   await orm.schema.createSchema();
-
-  const user1 = new User({
-    id: "1",
-    role: new RoleEntity({ id: "1" }),
-  });
-  const user2 = new User({
-    id: "2",
-    role: new RoleEntity({ id: "2" }),
-  });
-  const project = new Project({ id: "1" });
-  orm.em.create(
-    ProjectMember,
-    new ProjectMember({
-      id: "1",
-      user: user1,
-      project,
-      type: ProjectMemberType.TYPE1,
-    })
-  );
-  orm.em.create(
-    ProjectMember,
-    new ProjectMember({
-      id: "2",
-      user: user2,
-      project,
-      type: ProjectMemberType.TYPE1,
-    })
-  );
-  await orm.em.flush();
-
-  user1.deletedAt = new Date();
-  await orm.em.persistAndFlush(user1);
 
   orm.em.clear();
 });
@@ -157,20 +73,14 @@ afterAll(async () => {
   await orm.close(true);
 });
 
-test("should populate project members with specific type using populateWhere", async () => {
-  const row = await orm.em.findOneOrFail(
-    Project,
-    {
-      id: "1",
-    },
-    {
-      populate: ["members.user"],
-      populateWhere: {
-        members: {
-          type: ProjectMemberType.TYPE1,
-        },
-      },
-    }
-  );
-  console.dir(wrap(row).toObject(), { depth: null });
+test("should populate user with referenceColumnName", async () => {
+  const qb = orm.em.createQueryBuilder(Entity1);
+
+  qb.select("*")
+    .leftJoinAndSelect("entity2", "e2")
+    .orderBy({ status: "desc" })
+    .limit(3)
+    .offset(2);
+
+  console.log(qb.getFormattedQuery());
 });
